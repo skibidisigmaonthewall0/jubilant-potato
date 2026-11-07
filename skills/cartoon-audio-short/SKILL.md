@@ -61,10 +61,11 @@ Do everything from here without stopping. Ask only if the timing cannot be resol
 ### 4.0 Get the kit
 The code kit ships **inside this skill folder** at `kit/` (engine, tools, worked example, plus vendored three.js r160 and the `toon.ts` Pen library from github.com/mromidev/claude-animated-shorts, both MIT). Locate the folder with `find / -name SKILL.md -path "*cartoon-audio-short*" 2>/dev/null` and treat its `kit/` as read-only.
 
-Then run `bash <skill>/kit/tools/setup.sh ~/shorts/<slug>`. It copies the engine and tools into the project, installs the vendored three.js, strips the types from `toon.ts` with Node 22 `module.stripTypeScriptTypes`, and links Playwright. No network is needed. If the vendored files are missing, it falls back to npm or a git clone.
+Then run `bash <skill>/kit/tools/setup.sh ~/shorts/<slug>`. It copies the engine and tools into the project, installs the vendored three.js, strips the types from `toon.ts` with Node 22 `module.stripTypeScriptTypes`, links Playwright, and writes an `env.sh` with the local Chromium and ffmpeg on `PATH`. No network is needed. If the vendored files are missing, it falls back to npm or a git clone.
 - Requirements: Node 22.6+, Python 3 with numpy + Pillow, ffmpeg, and Playwright with Chromium (`npm i -g playwright && npx playwright install chromium` if missing).
+- **Always start a session with `. ./env.sh` in the project** (it exports `PATH`, `LD_LIBRARY_PATH`, `CHROME_BIN`), and run `bash doctor.sh` once — it checks node, ffmpeg, numpy/Pillow, Chromium and every project file, and prints the fix for anything missing.
 - If package registries are blocked, git over GitHub usually works. Never disable TLS or route around the proxy.
-- Chromium: use the pre-installed Playwright browser with `--use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist`. That gives CPU WebGL at about 3-10 s per frame.
+- Chromium: use the pre-installed Playwright browser with `--use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist`. That gives CPU WebGL at about 3-10 s per frame. `render.mjs` passes `--no-sandbox` and honours `CHROME_BIN` for a hand-installed Chromium.
 
 ### 4.1 Timing
 Run `python3 timing.py voice.mp3 script.txt --out work`.

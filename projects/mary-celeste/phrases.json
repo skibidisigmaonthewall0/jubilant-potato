@@ -1,0 +1,127 @@
+{
+ "duration": 32.548563,
+ "frames30": 976,
+ "source": "silence-align (cost 6.64)",
+ "segments": [
+  [
+   0.0,
+   1.60175
+  ],
+  [
+   2.17839,
+   3.70463
+  ],
+  [
+   3.96503,
+   5.33703
+  ],
+  [
+   5.89091,
+   6.21878
+  ],
+  [
+   6.67605,
+   7.7829
+  ],
+  [
+   8.41492,
+   8.97227
+  ],
+  [
+   9.2768,
+   9.85317
+  ],
+  [
+   10.599,
+   13.5521
+  ],
+  [
+   13.9175,
+   16.8615
+  ],
+  [
+   17.266,
+   18.2285
+  ],
+  [
+   18.9725,
+   19.4781
+  ],
+  [
+   19.777,
+   24.0364
+  ],
+  [
+   24.7631,
+   24.9266
+  ],
+  [
+   25.1785,
+   27.6661
+  ],
+  [
+   28.1413,
+   29.7956
+  ],
+  [
+   30.4398,
+   30.8401
+  ],
+  [
+   31.2788,
+   32.2015
+  ]
+ ],
+ "phrases": [
+  {
+   "text": "In 1872,",
+   "s": 0.0,
+   "e": 1.602
+  },
+  {
+   "text": "sailors boarded a ship in the middle of the Atlantic.",
+   "s": 2.178,
+   "e": 5.337
+  },
+  {
+   "text": "The ship was in perfect order.",
+   "s": 5.891,
+   "e": 7.783
+  },
+  {
+   "text": "The crew was gone.",
+   "s": 8.415,
+   "e": 9.853
+  },
+  {
+   "text": "The Mary Celeste had left New York a month earlier with ten people aboard,",
+   "s": 10.599,
+   "e": 13.552
+  },
+  {
+   "text": "including the captain's wife and their little girl.",
+   "s": 13.918,
+   "e": 16.861
+  },
+  {
+   "text": "The cargo was untouched.",
+   "s": 17.266,
+   "e": 19.478
+  },
+  {
+   "text": "The food and water were untouched. Only the lifeboat was missing.",
+   "s": 19.777,
+   "e": 24.036
+  },
+  {
+   "text": "So ten people climbed into a tiny open boat and left a working ship behind.",
+   "s": 24.763,
+   "e": 29.796
+  },
+  {
+   "text": "Nobody has ever found them.",
+   "s": 30.44,
+   "e": 32.202
+  }
+ ]
+}
