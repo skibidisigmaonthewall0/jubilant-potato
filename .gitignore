@@ -1,0 +1,11 @@
+# render output and scratch
+frames/
+stills/
+out/
+work/
+*.mp4
+*.wav
+*.jpg
+!skills/cartoon-audio-short/kit/example/soldier/stills.jpg
+node_modules/
+package-lock.json
