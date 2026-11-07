@@ -13,6 +13,7 @@ skills/cartoon-audio-short/     the skill: SKILL.md (how to run a short end to e
   kit/vendor/                    three.js r160 + the toon.ts Pen library (both MIT), so setup works offline
 tools/install.sh                one-time toolchain install (Chromium, ffmpeg, Playwright)
 tools/new-short.sh              scaffold a new short project in ~/shorts/<slug>
+samples/                        a finished 19.4 s short rendered by this pipeline
 ```
 
 ## Install once
@@ -38,3 +39,10 @@ Every project is used after `. ./env.sh`, which puts the local Chromium and ffmp
 
 See `skills/cartoon-audio-short/SKILL.md` for the full rules (story, script formula, shot design, look
 traps, audio levels) and `skills/cartoon-audio-short/kit/README.md` for the code layout.
+
+## Verified sample
+
+`samples/the-soldier-who-never-left.mp4` — 19.4 s, 1080x1920, 30 fps, H.264 CRF 17 + AAC, −14.1 LUFS,
+music bed at −6.0 dB vs the voice, no frozen or black spans. Same run: 582 frames at 4.5 s/frame on CPU.
+Its voice track is a synthetic stand-in narrator (only so timing and mixing could be measured without a real
+recording); everything else — shots, cameras, cards, music, SFX — is the real pipeline.

@@ -7,5 +7,6 @@ work/
 *.wav
 *.jpg
 !skills/cartoon-audio-short/kit/example/soldier/stills.jpg
+!samples/*.mp4
 node_modules/
 package-lock.json

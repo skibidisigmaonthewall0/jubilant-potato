@@ -9,6 +9,8 @@ cp "$KIT"/engine/*.js "$KIT"/engine/index.html "$P/web/"
 cp "$KIT"/example/soldier/story.js "$P/web/story.js"        # starting point: rewrite for the new story
 cp "$KIT"/example/soldier/audio.py "$P/audio.py"            # starting point: rewrite the cue table
 cp "$KIT"/tools/*.mjs "$KIT"/tools/*.py "$P/" 2>/dev/null || true
+cp "$KIT"/tools/finish.sh "$KIT"/tools/doctor.sh "$P/" 2>/dev/null || true
+chmod +x "$P"/*.sh 2>/dev/null || true
 
 # three.js r160 (module build): vendored first, then npm, then a sparse git clone.
 if [ ! -f "$P/web/lib/three.module.js" ]; then
