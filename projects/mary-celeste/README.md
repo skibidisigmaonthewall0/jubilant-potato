@@ -41,3 +41,15 @@ bash finish.sh "The Ship That Sailed With Nobody Aboard"
 Only documented facts: left New York 7 Nov 1872, found 4 Dec 1872 by *Dei Gratia*, ten people
 aboard including the captain's wife and daughter, cargo, food and water intact, the lifeboat,
 chronometer and sextant gone, never found. No "half-eaten dinner", no undamaged boats invented.
+
+## Finished render
+`out/The-Ship-That-Sailed-With-Nobody-Aboard.mp4` — 1080x1920, 30 fps, 32.5 s, H.264 CRF 17,
+AAC 192k. Audio -14.6 LUFS integrated, -1.2 dBTP, LRA 2.6 LU. `contact-sheet.jpg` is the QA grid
+(one frame every half second).
+
+`finish.sh` here is the two-pass version: a single `loudnorm` pass lands ~1 dB short because it
+normalises dynamically, so it measures first and then applies one linear gain.
+
+## The end card
+The last beat ("nobody has ever found them") is open water at dusk and one oar floating where the
+boat was last seen — no text card, no invented detail.
