@@ -1,176 +1,217 @@
-"""Synthesized music bed + SFX stems for the soldier short. Levels are set later by mix.py."""
-import numpy as np, subprocess, wave
+"""Synthesized music bed + SFX stems for "The Ship That Sailed With Nobody Aboard".
+
+Writes music.wav and sfx.wav only; mix.py applies the level lock
+(music/sfx at 50 % of the voice, i.e. -6 dB). Cue times come from work/phrases.json
+so every hit lands on a word of the narration.
+"""
+import json, wave
+import numpy as np
 
 SR = 48000
-DUR = 592 / 30
+TOTAL_FRAMES = 976
+DUR = TOTAL_FRAMES / 30.0          # 32.533 s
 N = int(DUR * SR)
-rng = np.random.default_rng(7)
-t_all = np.arange(N) / SR
+rng = np.random.default_rng(11)
+F = lambda f: f / 30.0            # frame -> seconds
 
-def env(n, a=0.005, r=0.2, sus=None):
+
+# ---------------------------------------------------------------- helpers
+def env(n, a=0.005, r=0.2):
     t = np.arange(n) / SR
-    e = np.minimum(1, t / max(a, 1e-4)) * np.exp(-t / r)
-    return e
+    return np.minimum(1, t / max(a, 1e-4)) * np.exp(-t / r)
 
-def lp(x, k):  # one-pole low-pass, k in (0,1)
-    y = np.empty_like(x); acc = 0.0
-    for i in range(len(x)): acc += k * (x[i] - acc); y[i] = acc
-    return y
 
 def lp_fast(x, cutoff):
-    # FFT brick-ish low-pass (fast, fine for beds)
     X = np.fft.rfft(x); f = np.fft.rfftfreq(len(x), 1 / SR)
-    X *= 1 / (1 + (f / cutoff) ** 4); return np.fft.irfft(X, len(x)).astype(np.float32)
+    X *= 1 / (1 + (f / cutoff) ** 4)
+    return np.fft.irfft(X, len(x)).astype(np.float32)
+
 
 def hp_fast(x, cutoff):
     X = np.fft.rfft(x); f = np.fft.rfftfreq(len(x), 1 / SR)
-    X *= 1 - 1 / (1 + (f / cutoff) ** 4); return np.fft.irfft(X, len(x)).astype(np.float32)
+    X *= 1 - 1 / (1 + (f / cutoff) ** 4)
+    return np.fft.irfft(X, len(x)).astype(np.float32)
+
 
 def place(buf, sig, t0, gain=1.0):
-    i = int(t0 * SR); j = min(N, i + len(sig))
-    if i < N and j > i: buf[i:j] += sig[: j - i] * gain
+    i = int(t0 * SR); j = min(len(buf), i + len(sig))
+    if i < len(buf) and j > i:
+        buf[i:j] += sig[: j - i] * gain
+
 
 midi = lambda m: 440 * 2 ** ((m - 69) / 12)
+noise = lambda d: rng.standard_normal(int(d * SR)).astype(np.float32)
 
-# ---------------- music ----------------
+
+def swell(d, lo=180, hi=1600, a=0.5, r=0.6):
+    """wind / sea wash: band-limited noise with a slow swell"""
+    n = int(d * SR); t = np.arange(n) / SR
+    s = hp_fast(lp_fast(noise(d), hi), lo)
+    e = np.minimum(1, t / a) * np.minimum(1, (d - t) / max(r, 1e-3))
+    return (s * np.clip(e, 0, 1)).astype(np.float32)
+
+
+# ---------------------------------------------------------------- music
+# A slow sea lament in D minor: a held drone, a rocking fifth, and a music box.
 music = np.zeros(N, np.float32)
-BPM = 104; beat = 60 / BPM
-prog = [(57, [57, 60, 64]), (53, [53, 57, 60]), (55, [55, 59, 62]), (52, [52, 56, 59])]  # Am F G E
-def pluck(f, dur=0.35, bright=0.5):
+BEAT = 60 / 62.0                   # very slow
+LOAD = 26.6                        # the bed lets go as the last line starts
+t_all = np.arange(N) / SR
+
+# 1. drone: D2/A2/D3, breathing
+drone = (np.sin(2 * np.pi * 73.42 * t_all)
+         + 0.6 * np.sin(2 * np.pi * 110.0 * t_all + 0.4)
+         + 0.35 * np.sin(2 * np.pi * 146.83 * t_all + 1.1)
+         + 0.18 * np.sin(2 * np.pi * 220.0 * t_all + 2.0))
+breath = 0.62 + 0.38 * np.sin(2 * np.pi * 0.085 * t_all - 1.2) ** 2
+drone = lp_fast((drone * breath).astype(np.float32), 900)
+fade_in = np.clip(t_all / 2.2, 0, 1)
+fade_out = np.clip((DUR - t_all) / 3.4, 0, 1) ** 1.4
+music += drone * 0.32 * fade_in * fade_out
+
+# 2. the rocking boat: a slow two-note cell, low and wooden
+def pluck(f, dur=0.9, bright=0.42):
     n = int(dur * SR); t = np.arange(n) / SR
-    s = sum((bright ** k) * np.sin(2 * np.pi * f * (k + 1) * t) / (k + 1) for k in range(6))
-    return (s * env(n, 0.003, dur * 0.35)).astype(np.float32)
-def brass(fs, dur):
-    n = int(dur * SR); t = np.arange(n) / SR; s = np.zeros(n)
-    for f in fs:
-        ph = 2 * np.pi * f * t + 0.003 * np.sin(2 * np.pi * 5 * t)
-        s += sum(np.sin((k + 1) * ph) / (k + 1) ** 1.3 for k in range(8))
-    a = np.minimum(1, t / 0.08) * np.minimum(1, (dur - t) / 0.15).clip(0)
-    return lp_fast((s * a).astype(np.float32), 1800) / len(fs)
-def drum(kind):
-    if kind == "kick":
-        n = int(0.35 * SR); t = np.arange(n) / SR; f = 50 + 90 * np.exp(-t * 30)
-        return (np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t * 9)).astype(np.float32)
-    n = int(0.18 * SR); t = np.arange(n) / SR
-    s = rng.standard_normal(n) * np.exp(-t * 28) * 0.6 + np.sin(2 * np.pi * 190 * t) * np.exp(-t * 20) * 0.5
-    return hp_fast(s.astype(np.float32), 300)
+    s = sum((bright ** k) * np.sin(2 * np.pi * f * (k + 1) * t) / (k + 1) ** 1.6 for k in range(5))
+    return (s * env(n, 0.01, dur * 0.3)).astype(np.float32)
 
-MUSIC_END = 14.15  # music stops on "The bridge is not safe"
-bar = 0; tt = 0.0
-while tt < MUSIC_END:
-    root, ch = prog[bar % 4]
-    place(music, brass([midi(m) for m in ch], beat * 4 * 0.98), tt, 0.10)
-    for b in range(4):
-        tb = tt + b * beat
-        if tb >= MUSIC_END: break
-        place(music, drum("kick" if b % 2 == 0 else "snare"), tb, 0.55 if b % 2 == 0 else 0.32)
-        place(music, pluck(midi(root - 12), 0.4, 0.4), tb, 0.35)
-        place(music, pluck(midi(ch[(b + bar) % 3] + 12), 0.22, 0.6), tb + beat / 2, 0.13)
-    if bar % 2 == 1:  # little fanfare figure
-        for k, m in enumerate([ch[0] + 12, ch[1] + 12, ch[2] + 12]):
-            place(music, brass([midi(m)], beat * 0.45), tt + 2 * beat + k * beat * 0.5, 0.07)
-    bar += 1; tt += beat * 4
-# fade the bed at the stop
-i0 = int((MUSIC_END - 0.08) * SR); music[i0:] *= np.linspace(1, 0, N - i0) ** 8
-# tension drone from the sting to the end
-dn = int((DUR - MUSIC_END) * SR); td = np.arange(dn) / SR
-drone = (np.sin(2 * np.pi * 55 * td) + 0.5 * np.sin(2 * np.pi * 82.4 * td) + 0.3 * np.sin(2 * np.pi * 110.3 * td)) * np.minimum(1, td / 1.2)
-drone = lp_fast(drone.astype(np.float32), 600)
-place(music, drone, MUSIC_END, 0.09)
+CELL = [50, 57, 53, 48]            # D3 A3 F3 C3 — a rocking figure
+tt = 0.6; k = 0
+while tt < LOAD:
+    m = CELL[k % 4]
+    place(music, pluck(midi(m), 1.2, 0.36), tt, 0.16)
+    place(music, pluck(midi(m + 12), 0.7, 0.5), tt + BEAT * 0.5, 0.055)
+    tt += BEAT; k += 1
 
-# ---------------- sfx ----------------
+# 3. music box: a sparse, high, slightly out-of-tune melody over the middle
+BOX = [(0, 74), (2, 77), (3.5, 81), (5, 79), (7, 77), (8.5, 74), (10, 72), (12, 74)]
+for b, m in BOX:
+    t0 = F(300) + b * BEAT
+    if t0 < LOAD:
+        place(music, pluck(midi(m), 1.6, 0.62), t0, 0.075)
+        place(music, pluck(midi(m + 12), 0.9, 0.75), t0 + 0.012, 0.02)
+
+# 4. the last line: the bed thins to a single sustained fifth, then a low swell
+dn = int((DUR - LOAD) * SR); td = np.arange(dn) / SR
+tail = (np.sin(2 * np.pi * 73.42 * td) + 0.5 * np.sin(2 * np.pi * 110.0 * td)) * np.minimum(1, td / 1.5) * np.exp(-td / 6.0)
+place(music, lp_fast(tail.astype(np.float32), 700), LOAD, 0.22)
+
+# ---------------------------------------------------------------- sfx
 sfx = np.zeros(N, np.float32)
-def noise(d): return rng.standard_normal(int(d * SR)).astype(np.float32)
-def thunk(f0=90, d=0.3):
-    n = int(d * SR); t = np.arange(n) / SR
-    return (np.sin(2 * np.pi * f0 * t * (1 + 0.6 * np.exp(-t * 40))) * np.exp(-t * 14) + lp_fast(noise(d), 1200) * np.exp(-t * 30) * 0.5).astype(np.float32)
-def rumble(d):
-    n = int(d * SR); t = np.arange(n) / SR
-    s = lp_fast(noise(d), 160) * 3 * np.minimum(1, t / 0.15) * np.exp(-t / (d * 0.45))
-    return s.astype(np.float32)
-def crash(d=1.2):
-    n = int(d * SR); t = np.arange(n) / SR; s = np.zeros(n, np.float32)
-    for k in range(14):
-        tk = rng.uniform(0, d * 0.6); i = int(tk * SR); g = thunk(rng.uniform(60, 160), 0.35) * rng.uniform(0.3, 0.9)
-        s[i:i + len(g)] += g[: n - i]
-    s += lp_fast(noise(d), 2500) * np.exp(-t * 3) * 0.25
-    return s
-def cuckoo():
-    out = []
-    for f, d in [(740, 0.16), (587, 0.24)]:
-        n = int(d * SR); t = np.arange(n) / SR
-        out.append(np.sin(2 * np.pi * f * t) * np.minimum(1, t / 0.01) * np.exp(-t * 6)); out.append(np.zeros(int(0.06 * SR)))
-    return np.concatenate(out).astype(np.float32)
-def scrape(d=0.8):
-    n = int(d * SR); t = np.arange(n) / SR
-    s = noise(d) * (0.5 + 0.5 * np.sin(2 * np.pi * 13 * t)) * np.sin(np.pi * t / d)
-    s = hp_fast(lp_fast(s, 5000), 1500)
-    ring = np.sin(2 * np.pi * 1870 * t) * np.exp(-t * 3) * 0.2
-    return (s * 0.6 + ring).astype(np.float32)
-def ting():
-    n = int(1.2 * SR); t = np.arange(n) / SR
-    return (sum(np.sin(2 * np.pi * f * t) * np.exp(-t * k) for f, k in [(2093, 4), (3136, 6), (4186, 8)]) * 0.3).astype(np.float32)
-def sting():
-    n = int(2.0 * SR); t = np.arange(n) / SR
-    low = np.sin(2 * np.pi * 41 * t) * np.exp(-t * 1.5) * 1.2
-    hit = lp_fast(noise(2.0), 900) * np.exp(-t * 6) * 0.8
-    stab = brass([midi(45), midi(48), midi(51)], 1.4); s = low + hit; s[: len(stab)] += stab * 2.2 * np.exp(-np.arange(len(stab)) / SR * 2)
-    return s.astype(np.float32)
-def creak(d=0.6, f0=140):
-    n = int(d * SR); t = np.arange(n) / SR
-    rate = f0 * (1 + 0.35 * np.sin(2 * np.pi * 1.3 * t / d))
-    ph = np.cumsum(rate) / SR; pulses = (np.mod(ph, 1) < 0.08).astype(np.float32)
-    s = lp_fast(pulses * (0.6 + 0.4 * rng.random(n).astype(np.float32)), 2200) * np.sin(np.pi * t / d)
-    return hp_fast(s, 200) * 2.5
-def snap():
-    d = 0.5; n = int(d * SR); t = np.arange(n) / SR
-    return (hp_fast(noise(d), 800) * np.exp(-t * 18) * 1.4 + np.pad(thunk(120, 0.4), (0, n - int(0.4 * SR))) * 0.6).astype(np.float32)
-def splash(d=1.0):
-    n = int(d * SR); t = np.arange(n) / SR
-    s = lp_fast(noise(d), 4000) * (np.exp(-t * 4) * np.minimum(1, t / 0.01)) + lp_fast(noise(d), 400) * np.exp(-t * 7) * 1.5
-    return s.astype(np.float32)
-def whoosh(d=0.5):
-    n = int(d * SR); t = np.arange(n) / SR
-    return (lp_fast(noise(d), 1500) * np.sin(np.pi * t / d) ** 2 * 0.6).astype(np.float32)
-def snore(d=1.1):
-    n = int(d * SR); t = np.arange(n) / SR
-    buzz = (np.mod(np.cumsum(60 + 25 * np.sin(np.pi * t / d)) / SR, 1) < 0.3).astype(np.float32)
-    return (lp_fast(buzz * 0.5 + noise(d) * 0.15, 700) * np.sin(np.pi * t / d) ** 2).astype(np.float32)
-def leaves(d):
-    n = int(d * SR); t = np.arange(n) / SR
-    return (hp_fast(lp_fast(noise(d), 6000), 2500) * (0.3 + 0.3 * np.sin(2 * np.pi * 0.7 * t) ** 2) * np.minimum(1, t / 0.4) * np.minimum(1, (d - t) / 0.4)).astype(np.float32)
-def water(d):
-    n = int(d * SR); t = np.arange(n) / SR
-    return (lp_fast(noise(d), 900) * 0.5 + hp_fast(lp_fast(noise(d), 3000), 1200) * 0.15 * (0.6 + 0.4 * np.sin(2 * np.pi * 0.4 * t))).astype(np.float32)
 
-F = lambda f: f / 30
-place(sfx, whoosh(0.6), F(18), 0.5)            # hook camera pull-back
-place(sfx, leaves(2.2), F(62), 0.35)           # the years blow past
-place(sfx, thunk(85, 0.35), F(120), 1.0)       # spear stamp on "post"
-place(sfx, rumble(2.2), F(176), 0.9)           # empire collapses
-place(sfx, crash(1.4), F(186), 0.7)
-place(sfx, whoosh(0.5), F(196), 0.35)          # rack to the soldier
-place(sfx, cuckoo(), F(255), 0.35)             # "crazy"
-place(sfx, whoosh(0.4), F(276), 0.6)           # time jump flash
-for k in range(2): place(sfx, snore(1.15), F(286) + k * 1.45, 0.45)
-place(sfx, scrape(0.9), F(316), 0.6)           # helmet lifted
-place(sfx, ting(), F(392), 0.55)               # the carving glints
-place(sfx, sting(), 14.18, 0.85)               # "The bridge is not safe."
-place(sfx, creak(0.55, 120), F(464), 0.9); place(sfx, creak(0.5, 160), F(473), 0.7)
-place(sfx, whoosh(0.7), F(484), 0.5)           # crane under the deck
-place(sfx, water(DUR - F(484)), F(484), 0.35)
-place(sfx, creak(0.8, 90), F(536), 1.0)
-place(sfx, snap(), F(548), 0.9)                # brace breaks on "rotting"
-place(sfx, splash(1.0), F(580), 0.9)
 
-# ---------------- stems ----------------
-# This script writes stems only; mix.py applies the level lock (music/sfx at 50 % of the voice).
+def creak(d=0.7, f0=130):
+    n = int(d * SR); t = np.arange(n) / SR
+    rate = f0 * (1 + 0.4 * np.sin(2 * np.pi * 1.1 * t / d))
+    ph = np.cumsum(rate) / SR
+    pulses = (np.mod(ph, 1) < 0.07).astype(np.float32)
+    s = lp_fast(pulses * (0.6 + 0.4 * rng.random(n).astype(np.float32)), 2400) * np.sin(np.pi * t / d)
+    return (hp_fast(s, 180) * 2.6).astype(np.float32)
+
+
+def thunk(f0=78, d=0.45):
+    n = int(d * SR); t = np.arange(n) / SR
+    body = np.sin(2 * np.pi * f0 * t * (1 + 0.5 * np.exp(-t * 30))) * np.exp(-t * 11)
+    knock = lp_fast(noise(d), 1100) * np.exp(-t * 26) * 0.45
+    return (body + knock).astype(np.float32)
+
+
+def splash(d=1.1, big=1.0):
+    n = int(d * SR); t = np.arange(n) / SR
+    s = (hp_fast(lp_fast(noise(d), 5200), 700) * np.exp(-t * 3.4) * np.minimum(1, t / 0.012)
+         + lp_fast(noise(d), 380) * np.exp(-t * 6) * 1.3 * big)
+    return s.astype(np.float32)
+
+
+def slap(d=0.5):
+    """wave against a hull"""
+    n = int(d * SR); t = np.arange(n) / SR
+    s = lp_fast(noise(d), 900) * np.exp(-t * 7) * np.minimum(1, t / 0.05)
+    return (s * 1.4).astype(np.float32)
+
+
+def rope(d=0.42, f0=190):
+    n = int(d * SR); t = np.arange(n) / SR
+    scrape = hp_fast(lp_fast(noise(d), 6000), 1800) * np.exp(-t * 5) * (0.5 + 0.5 * np.sin(2 * np.pi * 23 * t))
+    ping = np.sin(2 * np.pi * f0 * t) * np.exp(-t * 22) * 0.4
+    return (scrape * 0.5 + ping).astype(np.float32)
+
+
+def gull(d=0.6):
+    n = int(d * SR); t = np.arange(n) / SR
+    f = 900 + 500 * np.sin(np.pi * t / d) ** 2
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    s = np.sin(ph) + 0.3 * np.sin(2 * ph) + 0.15 * np.sin(3 * ph)
+    return (s * np.sin(np.pi * t / d) ** 2 * 0.35).astype(np.float32)
+
+
+def bell(d=2.0, f=1046.5):
+    n = int(d * SR); t = np.arange(n) / SR
+    s = sum(np.sin(2 * np.pi * f * r * t) * np.exp(-t * k)
+            for r, k in [(1.0, 1.6), (2.0, 2.4), (2.98, 3.2), (4.2, 4.4)])
+    return (s * np.minimum(1, t / 0.006) * 0.28).astype(np.float32)
+
+
+def sting(d=2.4):
+    n = int(d * SR); t = np.arange(n) / SR
+    low = np.sin(2 * np.pi * 36.7 * t) * np.exp(-t * 1.1)
+    wash = lp_fast(noise(d), 800) * np.exp(-t * 4) * 0.7
+    return (low * 1.1 + wash).astype(np.float32)
+
+
+# --- cue sheet (times from work/phrases.json + the shot plan) --------------
+# The whole SFX stem sits well under the -6 dB ceiling on purpose: these are sea sounds
+# under a spoken line, not hits. mix.py still applies the level lock afterwards.
+# 0.06-1.62 "In 1872, sailors boarded a ship..."  — sea, wind, a distant gull
+place(sfx, swell(3.4, 140, 1500, 0.9, 1.2), 0.02, 0.5)
+place(sfx, gull(0.62), 0.55, 0.30)
+place(sfx, gull(0.5), 0.78, 0.18)
+place(sfx, slap(0.6), 1.10, 0.5)
+# 2.18 "The ship was in perfect order."  — the hull groans, water slaps
+place(sfx, creak(0.85, 118), 2.30, 0.55)
+place(sfx, slap(0.55), 3.30, 0.45)
+# 3.96 "The crew was gone."  — the wind takes over, empty
+place(sfx, swell(2.6, 220, 2400, 1.0, 1.4), 3.98, 0.55)
+place(sfx, creak(0.55, 165), 4.65, 0.5)
+# 5.88 "The Mary Celeste had left New York..." — harbour (from 405 later); here the boat pulling
+place(sfx, rope(0.4, 175), 6.00, 0.5)
+place(sfx, splash(0.85), 6.55, 0.42)
+# 8.42-10.60 "...with ten people aboard, including the captain's wife and their little girl"
+place(sfx, bell(2.2, 880), 8.55, 0.30)
+place(sfx, gull(0.55), 9.90, 0.22)
+# 10.60 "the captain's wife and their little girl" — a music-box turn, very quiet
+place(sfx, bell(1.6, 1318.5), 10.75, 0.16)
+# 13.90-16.82 "The cargo was untouched. The food and water were untouched."
+place(sfx, thunk(64, 0.5), 14.05, 0.55)
+place(sfx, creak(0.7, 96), 15.10, 0.42)
+place(sfx, splash(0.9), 16.10, 0.45)
+# 17.26 "Only the lifeboat was missing." — the davits, the falls
+place(sfx, rope(0.5, 210), 17.30, 0.55)
+place(sfx, creak(0.9, 140), 18.20, 0.6)
+place(sfx, rope(0.45, 180), 19.30, 0.5)
+# 19.76-24.04 "So ten people climbed into a tiny open boat and left a working ship behind."
+place(sfx, splash(1.3, 1.2), 19.85, 0.55)
+place(sfx, creak(0.8, 104), 21.20, 0.55)
+place(sfx, swell(3.0, 160, 1800, 1.2, 1.6), 22.10, 0.42)
+# 24.76 "Nobody has ever found them." — the sting, then only open water
+place(sfx, sting(2.6), 24.80, 0.62)
+place(sfx, splash(1.5, 0.8), 26.40, 0.4)
+place(sfx, swell(6.0, 120, 1200, 2.0, 2.6), 27.00, 0.40)
+place(sfx, slap(0.7), 30.20, 0.35)
+
+
+# ---------------------------------------------------------------- stems
 def write_wav(path, x):
-    pcm = (np.clip(x, -1, 1) * 32767).astype(np.int16)
+    x = np.clip(x, -1, 1)
+    pcm = (x * 32767).astype(np.int16)
     with wave.open(path, "wb") as w:
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(SR); w.writeframes(pcm.tobytes())
 
+
+sfx *= 0.42        # sea sounds under narration: quieter than the level ceiling allows
+music *= 1.0
+
 write_wav("music.wav", music)
 write_wav("sfx.wav", sfx)
-print(f"stems ok: music.wav sfx.wav  {N / SR:.2f} s")
+print(f"stems ok: music.wav sfx.wav  {N / SR:.2f} s  ({TOTAL_FRAMES} frames)")
 print("now: python3 mix.py voice.mp3 music.wav sfx.wav")

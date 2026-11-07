@@ -41,4 +41,3 @@ bash finish.sh "The Ship That Sailed With Nobody Aboard"
 Only documented facts: left New York 7 Nov 1872, found 4 Dec 1872 by *Dei Gratia*, ten people
 aboard including the captain's wife and daughter, cargo, food and water intact, the lifeboat,
 chronometer and sextant gone, never found. No "half-eaten dinner", no undamaged boats invented.
-`.

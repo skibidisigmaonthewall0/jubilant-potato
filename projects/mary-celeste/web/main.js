@@ -96,12 +96,11 @@ scene.add(sun); scene.add(sun.target);
 scene.fog = new THREE.Fog('#ffffff', 40, 600);
 
 // ---------- world ----------
-// Sets: A the open Atlantic (Mary Celeste), B the captain's cabin, C the hold, D New York harbour.
+// Sets: A the open Atlantic (Mary Celeste), B the captain's cabin, C the hold.
 // Each set is its own group, parked far from the others and switched on per shot in worldState().
 const SEA = new THREE.Group(); scene.add(SEA);
 const CABIN = new THREE.Group(); CABIN.position.set(420, 0, 0); scene.add(CABIN);
 const HOLD = new THREE.Group(); HOLD.position.set(820, 0, 0); scene.add(HOLD);
-const HARB = new THREE.Group(); HARB.position.set(0, 0, -520); scene.add(HARB);
 
 const M2 = {
   deck: texM(P.deckPlank(5), 1, 1), hull: texM(P.hull(7), 1, 1), hullRed: texM(P.hull(8), 1, 1),
@@ -131,6 +130,9 @@ const seaMat = new THREE.ShaderMaterial({
     float noise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(hash(i),hash(i+vec2(1,0)),f.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x), f.y); }
     void main(){
       float camD = length(vW.xz - cameraPosition.xz);
+      // height over distance: big right under the camera, tending to zero at the horizon
+      float camH = max(0.35, cameraPosition.y);
+      float slope = camH / sqrt(camH*camH + camD*camD);
       vec2 p = vW.xz*0.06;
       float swell = noise(p + vec2(t*0.06, -t*0.035)) * 0.6 + noise(p*2.7 + 11. + vec2(-t*0.1, t*0.05)) * 0.4;
       float ripple = noise(vW.xz*0.5 + vec2(t*0.35, -t*0.2));
@@ -139,8 +141,9 @@ const seaMat = new THREE.ShaderMaterial({
       // long glints on the swell faces
       float glint = smoothstep(0.62, 0.72, ripple) * smoothstep(0.45, 0.9, swell);
       c = mix(c, foam, glint * 0.5);
-      // distance: haze toward the horizon so the water meets the sky
-      c = mix(c, vec3(0.66,0.76,0.84), smoothstep(120., 780., camD) * 0.85);
+      // a flat sea seen at a grazing angle is a mirror of the sky: near the horizon the
+      // water has to take the fog colour, or the horizon reads as a hard dark bar.
+      c = mix(c, fogColor, (1.0 - smoothstep(0.004, 0.075, slope)) * 0.92);
       gl_FragColor = vec4(c,1.);
       #include <fog_fragment>
     }`,
@@ -409,6 +412,17 @@ const openBoat = new THREE.Group(); openBoat.position.set(3.0, 0, 6.2); SEA.add(
   shawl.rotation.x = -Math.PI / 2 + 0.35;
 }
 
+// ---------------- one oar, floating where the boat was last seen ----------------
+const lostOar = new THREE.Group(); lostOar.position.set(30.0, 0.06, 55.0); SEA.add(lostOar);
+{
+  const shaft = add(new THREE.CylinderGeometry(0.05, 0.05, 3.2, 6), M2.rope, 0, 0, 0, lostOar);
+  shaft.rotation.z = Math.PI / 2;
+  const blade = add(tbox(0.72, 0.05, 0.26, 1), M2.rope, 1.95, 0, 0, lostOar);
+  blade.rotation.y = 0.06;
+  const arm = add(tbox(0.9, 0.05, 0.2, 1), M2.timber, -1.5, 0.02, 0.02, lostOar); arm.rotation.y = 0.09;
+  lostOar.rotation.y = -0.5;
+}
+
 // ---------------- the sea "wide" set: a distant island so the horizon is not empty ----------------
 {
   const r = P.rng(61);
@@ -489,46 +503,6 @@ const openBoat = new THREE.Group(); openBoat.position.set(3.0, 0, 6.2); SEA.add(
   const coil = add(new THREE.TorusGeometry(0.42, 0.11, 8, 16), M2.rope, 2.2, 0.14, 3.7, HOLD); coil.rotation.x = Math.PI / 2;
 }
 
-// ---------------- harbour (set D): New York, a month earlier ----------------
-{
-  // pier
-  add(tbox(30, 0.5, 5.2, 1), M2.deck, 0, 1.6, 24.5, HARB);
-  for (let i = 0; i < 13; i++) { add(new THREE.CylinderGeometry(0.22, 0.26, 2.4, 8), M2.timber, -14 + i * 2.4, 0.6, 26.6, HARB); }
-  // warehouses along the quay
-  const r = P.rng(92);
-  for (let i = 0; i < 7; i++) {
-    const w = 5 + r() * 4, h = 5 + r() * 4, d = 6 + r() * 4, x = -22 + i * 8.5, z = 32 + r() * 4;
-    add(tbox(w, h, d, 2.4), i % 2 ? M.plaster : M2.timber, x, h / 2 + 1.4, z, HARB);
-    const rf = add(new THREE.ConeGeometry(Math.hypot(w, d) / 2 + 0.4, 2.0, 4), M.roof, x, h + 2.4, z, HARB); rf.rotation.y = Math.PI / 4; rf.scale.set(w / Math.hypot(w, d) * 1.41, 1, d / Math.hypot(w, d) * 1.41);
-    for (let k = 0; k < 2; k++) add(box(0.8, 0.9, 0.08), M.window, x - w * 0.25 + k * w * 0.4, h * 0.72 + 1.4, z - d / 2 - 0.05, HARB, { cast: false });
-  }
-  // the fort on the point, with a flag
-  const fg = new THREE.Group(); fg.position.set(-34, 0, 18); HARB.add(fg);
-  add(tbox(14, 4.2, 14, 3), M.stone, 0, 3.6, 0, fg);
-  for (let i = 0; i < 5; i++) add(tbox(1.4, 0.7, 1.4, 1.6), M.stone, -6 + i * 3, 6.1, 6.4, fg);
-  add(new THREE.CylinderGeometry(0.12, 0.12, 9, 6), M.rope, 0, 9, 0, fg);
-  const flag = add(new THREE.PlaneGeometry(2.2, 1.3, 6, 3), new THREE.MeshToonMaterial({ gradientMap: grad, color: '#c0392b', side: THREE.DoubleSide }), 1.1, 13.0, 0, fg, { cast: false });
-  flag.userData.flag = true; flag.userData.base = flag.geometry.attributes.position.array.slice();
-  // a couple of other hulls at anchor
-  for (const [x, z, s] of [[22, 40, 0.8], [-18, 48, 0.9], [36, 58, 0.7]]) {
-    const st = [{ x: -8, w: 1.8, yd: 3.0, yb: 1.2 }, { x: -4, w: 2.4, yd: 3.0, yb: 0.3 }, { x: 4, w: 2.2, yd: 3.0, yb: 0.4 }, { x: 8, w: 0.8, yd: 3.0, yb: 1.8 }];
-    const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s); HARB.add(g);
-    add(loftHull(st), M2.hull, 0, 0, 0, g);
-    add(new THREE.CylinderGeometry(0.12, 0.2, 12, 6), M2.rope, 0, 9, 0, g);
-  }
-}
-// the same ship at the pier for the harbour flashback (a second, static copy)
-const harbourShip = new THREE.Group(); harbourShip.position.set(-6, 0, 14.0); HARB.add(harbourShip);
-{
-  add(loftHull(stations), M2.hull, 0, 0, 0, harbourShip);
-  const g = new THREE.ExtrudeGeometry(deckShape(stations, 0.97), { depth: 0.22, bevelEnabled: false });
-  g.rotateX(Math.PI / 2); g.translate(0, DK, 0); add(g, M2.deck, 0, 0, 0, harbourShip, { cast: false });
-  add(new THREE.CylinderGeometry(0.16, 0.24, 19.5, 8), M2.rope, -2.2, DK + 9.7, 0, harbourShip);
-  add(new THREE.CylinderGeometry(0.16, 0.24, 17.5, 8), M2.rope, 9.4, DK + 8.7, 0, harbourShip);
-  add(tbox(4.2, 1.0, 2.6, 1.2), M2.deck, -4.6, DK + 0.5, 0, harbourShip);
-  add(tbox(4.6, 0.22, 3.0, 1.2), M2.ochre, -4.6, DK + 1.1, 0, harbourShip);
-}
-
 // ---------- cards ----------
 const CW = 1200, CH = 2000, CM = 2.25; // canvas px, card height in metres (design 600x1000 -> 2.25 m)
 const cardGeo = new THREE.PlaneGeometry(CM * 0.6, CM); cardGeo.translate(0, CM / 2 - CM * 0.025, 0);
@@ -574,7 +548,7 @@ const inkScene = fs(new THREE.ShaderMaterial({ uniforms: inkU, vertexShader: `va
       e = max(e, smoothstep(.006, .02, (ds - d)/d));                           // depth jump, near side only
       if (!card && abs(ds-d)/d < .06) e = max(e, smoothstep(.88, .72, dot(n, ns)) * .9); // crease
     }
-    return e * (1. - smoothstep(140., 520., d)*.8);
+    return e * (1. - smoothstep(30., 130., d)); // far detail: no ink, or the sea's far edge draws a bar across the horizon
   }
   void main(){
     vec3 c = texture2D(col, vUv).rgb;
@@ -628,7 +602,6 @@ function worldState(W_, f) {
   SEA.visible = S.set === 'sea';
   CABIN.visible = S.set === 'cabin';
   HOLD.visible = S.set === 'hold';
-  HARB.visible = false; harbourShip.visible = false; ship.visible = true;   // the harbour set is retired
   seaU.t.value = t;
   // the ship rolls gently; the rescuer rolls the other way
   if (SEA.visible) {
@@ -640,6 +613,9 @@ function worldState(W_, f) {
     rb.position.y = 0.35 + Math.sin(t * 1.7) * 0.07;
     rb.rotation.z = Math.sin(t * 1.3) * 0.05;
     openBoat.visible = S.id === 'boat';   // only in the beat she belongs to
+    lostOar.visible = S.id === 'lost';    // the last thing left on the water
+    lostOar.position.y = 0.05 + Math.sin(t * 0.9) * 0.03;
+    lostOar.rotation.z = Math.sin(t * 0.75 + 0.5) * 0.05;
     openBoat.position.x = 8.6 + (S.id === 'boat' ? (f - 731) * 0.004 : 0);
     openBoat.position.z = 13.2;
     openBoat.position.y = Math.sin(t * 1.05 + 0.4) * 0.14 - 0.05;
@@ -654,8 +630,6 @@ function worldState(W_, f) {
     lifeboat.position.z = 3.9 + gone * 1.2;
     lifeboat.rotation.z = gone * 0.5;
   }
-  // the harbour flag
-  if (HARB.visible) HARB.traverse((o) => { if (o.userData.flag) { const pa = o.geometry.attributes.position, b = o.userData.base; for (let i = 0; i < pa.count; i++) { const x = b[i * 3], y = b[i * 3 + 1]; pa.setZ(i, Math.sin(t * 4 + (x + 1.1) * 2.6) * 0.16 * (x + 1.1)); } pa.needsUpdate = true; } });
 }
 
 function drawActors(list, cam, OFF = [0, 0, 0]) {
@@ -693,7 +667,7 @@ const swapForNd = (on) => {
 };
 
 window.renderFrame = (f) => {
-  const S = shotAt(f), L = lightFor(S, f), C = (window.__cam || camAt(f));
+  const S = shotAt(f), L = lightFor(S, f), C = camAt(f);
   const OFF = SET_OFF[S.set] || [0, 0, 0];
   C.pos = [C.pos[0] + OFF[0], C.pos[1] + OFF[1], C.pos[2] + OFF[2]];
   C.look = [C.look[0] + OFF[0], C.look[1] + OFF[1], C.look[2] + OFF[2]];
@@ -720,12 +694,5 @@ window.renderFrame = (f) => {
   renderer.setRenderTarget(null); renderer.render(dofScene, fsCam);
   return true;
 };
-window.__harb = HARB; window.__ri = renderer.info; window.__camera = camera; window.__renderer = renderer; window.__scene = scene; window.__ship = ship; window.THREE = THREE;
-window.__dbg = () => ({
-  cam: camera.position.toArray().map(v => +v.toFixed(1)),
-  sea: SEA.visible, ship: ship.visible, harbour: HARB.visible, hs: harbourShip.visible,
-  hsPos: harbourShip.getWorldPosition(new THREE.Vector3()).toArray().map(v => +v.toFixed(1)),
-  shipPos: ship.getWorldPosition(new THREE.Vector3()).toArray().map(v => +v.toFixed(1)),
-});
 window.TOTAL = TOTAL;
 window.ready = true;

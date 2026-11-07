@@ -51,8 +51,8 @@ export const LIGHTS = {
     skyTop: '#6d8aa2', skyHor: '#c9d2d6', sat: 0.9, gain: '#eef3f6', waterDeep: '#2a4450', waterShal: '#54767f', glint: '#dfeef2', vig: 0.24, shadowExt: 20 },
   dusk: { az: 20, el: 5, sky: '#8d86b4', ground: '#4a3a44', hemi: 0.95, sun: '#ff9a5a', sunI: 2.8, fog: '#e0a684', fogNear: 60, fogFar: 620,
     skyTop: '#5a5a9e', skyHor: '#ffb07a', sunDisc: '#ffe0b0', sunSize: 0.004, sat: 1.1, gain: '#ffe6d2', waterDeep: '#2c3a5c', waterShal: '#9a6a72', glint: '#ffd0a0', vig: 0.3, shadowExt: 18 },
-  night: { az: 40, el: 16, sky: '#42506e', ground: '#1c2636', hemi: 0.72, sun: '#9fb4d8', sunI: 1.2, fog: '#31415c', fogNear: 60, fogFar: 700,
-    skyTop: '#16223c', skyHor: '#4d6280', sat: 1.0, gain: '#dfe8f4', waterDeep: '#101d30', waterShal: '#2b4560', glint: '#cfe0f0', vig: 0.34, shadowExt: 30 },
+  night: { az: 40, el: 16, sky: '#5a6c8c', ground: '#28323f', hemi: 1.15, sun: '#b8cee8', sunI: 2.2, fog: '#93aac6', fogNear: 90, fogFar: 1000,
+    skyTop: '#2c4468', skyHor: '#93aac6', sat: 1.02, gain: '#eef4fc', waterDeep: '#215074', waterShal: '#4a7c9c', glint: '#eaf6ff', vig: 0.22, shadowExt: 30 },
 };
 export const lightFor = (S, f) => {
   const L = { ...LIGHTS[S.light] };
@@ -128,10 +128,11 @@ const CAMS = {
   ],
   // last beat: the sea at dusk, nothing left to see
   // the sea where they were last seen, and one cut rope on the gunwale
+  // out on open water past both hulls: nothing left to see, the horizon is the subject
   lost: [
-    { f: 903, pos: [9.0, 4.6, 34.0], look: [26.0, 4.2, 52.0], fov: 40 },
-    { f: 940, pos: [11.0, 5.2, 36.0], look: [34.0, 4.4, 58.0], fov: 43 },
-    { f: 975, pos: [13.0, 5.8, 38.0], look: [42.0, 4.6, 64.0], fov: 46 },
+    { f: 903, pos: [15.0, 6.0, 11.0], look: [34.0, 3.0, 62.0], fov: 40 },
+    { f: 940, pos: [15.5, 6.1, 11.3], look: [36.0, 3.1, 64.0], fov: 41 },
+    { f: 975, pos: [16.0, 6.2, 11.6], look: [38.0, 3.2, 66.0], fov: 42 },
   ],
 };
 const KICKS = [{ f: 97, a: 0.5 }, { f: 209, a: 0.4 }, { f: 731, a: 0.45 }];
@@ -158,7 +159,7 @@ export const dofAt = (f) => {
     case 'hold': return { focus: dist(C.pos, [-0.9, 1.0, -2.8]), cinf: lerp(5, 9, smooth(ramp(f, 521, 592))) };
     case 'davits': return { focus: dist(C.pos, [6.0, 6.25, 3.9]), cinf: 6 };
     case 'boat': return { focus: dist(C.pos, [8.7, 0.9, 13.1]), cinf: lerp(6, 11, smooth(ramp(f, 740, 860))) };
-    case 'lost': return { focus: 400, cinf: lerp(4, 0.3, smooth(ramp(f, 915, 975))) };
+    case 'lost': return { focus: lerp(48, 56, smooth(ramp(f, 903, 975))), cinf: lerp(1.6, 1.0, smooth(ramp(f, 915, 975))) };
   }
   return { focus: 12, cinf: 0 };
 };
